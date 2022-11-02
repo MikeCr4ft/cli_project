@@ -283,12 +283,6 @@ def metrics(
         print((get_id(COMMANDS[0] + str(i))["name"]) + "  " + str(character_counter[i]))
 
 
-def main():
-    lo1 = "September 5, 2021"
-    lo2 = "September 6 2021"
-
-    datetime.strptime('June 1 2005', '%B %d %Y').date()
-
 
 if __name__ == "__main__":
     app()
