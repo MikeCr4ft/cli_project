@@ -1,4 +1,3 @@
-import argparse
 from typing import Optional
 import typer
 import requests
@@ -8,102 +7,81 @@ from datetime import datetime
 app = typer.Typer()
 
 URL = "https://rickandmortyapi.com/api/"
-COMMANDS = {0: "character/", 1: "location/", 2: "episode/"}
+COMMANDS = {"CHARACTER": "character/", "LOCATION": "location/", "EPISODE": "episode/"}
 
 
-def get_request(request: str):
+def get_request_all_pages(request: str):
     """
     get request
     :param request: the type of thing(ch,loc,ep)
     :return: the response
+    :rtype: list
     """
-    x = requests.get(URL + request).json()
-    if "results" in x.keys():
-        all_pages = x["results"]
-        while x["info"]["next"]:
-            x = requests.get(x["info"]["next"]).json()
-            all_pages += x["results"]
-    else:
-        all_pages = x["error"]
+    response = requests.get(URL + request).json()
+    all_pages = response
+    if "results" in response.keys():
+        all_pages = response["results"]
+        while response["info"]["next"]:
+            response = requests.get(response["info"]["next"]).json()
+            all_pages += response["results"]
+    elif "error" is response.keys():
+        all_pages = response["error"]
     return all_pages
 
 
-def get_id(request: str):
-    """
-    get request by id
-    :param request: the type of thing(ch,loc,ep)
-    :return: the response
-    """
-    x = requests.get(URL + request).json()
-    return x
-
-
 @app.command()
-def ls(characters: Optional[bool] = typer.Option(False, "--characters", "-c"),
-       locations: Optional[bool] = typer.Option(False, "--locations", "-l"),
-       episodes: Optional[bool] = typer.Option(False, "--episodes", "-e"),
-       ):
+def show(characters: Optional[bool] = typer.Option(False, "--characters", "-c"),
+         locations: Optional[bool] = typer.Option(False, "--locations", "-l"),
+         episodes: Optional[bool] = typer.Option(False, "--episodes", "-e"),
+         ):
     """
     shows everything acording to filters
     :param characters: shows characters
     :param locations: shows location
     :param episodes: shows episode
-    :return: everything according to filters
+    :return: prints everything according to filters
+    :rtype: None
     """
-    lst = locals()
+    lst = [characters, locations, episodes]
     output = []
     if_no_arg = True
-    num_of_command = 0
-    for i in lst:
-        if lst[i]:
+    for count, key in enumerate(COMMANDS):
+        if lst[count]:
             if_no_arg = False
-            output += get_request(COMMANDS[num_of_command])
-        num_of_command += 1
+            output += get_request_all_pages(COMMANDS[key])
     if if_no_arg:
-        for i in range(len(lst)):
-            output += get_request(COMMANDS[i])
+        for count, key in enumerate(COMMANDS):
+            output += get_request_all_pages(COMMANDS[key])
     print(json.dumps(output, indent=4))
 
 
-def filter_request(args, type_filter: int):
+def filter_request(args, type_filter: str):
     """
 
     :param args: arguments/filtes
     :param type_filter: character/episodes/location
     :return: repsonse according to filters
+    :rtype: list
     """
     filter_args = '?'
     for key in args:
         if not args[key] == "":
             filter_args += str(key) + "=" + str(args[key]) + "&"
-    response = get_request(COMMANDS[type_filter] + filter_args)
+    response = get_request_all_pages(COMMANDS[type_filter] + filter_args)
     return response
 
 
-def spec_ch_og_filter(results, input):
+def spec_ch_og_filter(results, input, filter):
     """
     filters character according to origin
     :param results: all the characters
     :param input: origin
     :return: response
+    :rtype: None
     """
     final_response = []
     for key in results:
-        if key["origin"]["name"] == input:
-            final_response.append(key)
-    return final_response
-
-
-def spec_ch_loc_filter(results, input):
-    """
-        filters character according to location
-        :param results: all the characters
-        :param input: location
-        :return: response
-        """
-    final_response = []
-    for key in results:
-        if key["location"]["name"] == input:
+        if key[filter]["name"] == input:
             final_response.append(key)
     return final_response
 
@@ -130,15 +108,16 @@ def character(
     :param origin: origin of character
     :param id: id of character
     :return: returns all the characters according to filters
+    :rtype: None
     """
     args = locals()
-    response = filter_request(args, 0)
+    response = filter_request(args, "CHARACTER")
     if location != "":
-        response = spec_ch_loc_filter(response, location)
+        response = spec_ch_og_filter(response, location, "location")
     if origin != "":
-        response = spec_ch_og_filter(response, origin)
+        response = spec_ch_og_filter(response, origin, "origin")
     if id is not None:
-        response = get_id(COMMANDS[0] + str(id))
+        response = get_request_all_pages(COMMANDS["CHARACTER"] + str(id))
     print(json.dumps(response, indent=4))
 
 
@@ -156,11 +135,12 @@ def location(
     :param type: type of locatin
     :param dimension: dimension of location
     :return: returns location according to filters
+    :rtype: None
     """
     args = locals()
-    response = filter_request(args, 1)
+    response = filter_request(args, "LOCATION")
     if id is not None:
-        response = get_id(COMMANDS[1] + str(id))
+        response = get_request_all_pages(COMMANDS["LOCATION"] + str(id))
     print(json.dumps(response, indent=4))
 
 
@@ -171,13 +151,18 @@ def date_comp(input, key, is_after):
     :param key: date of episode
     :param is_after: boolean if after
     :return: true if is_After and comparison is true
+    :rtype: bool
     """
-    d1 = datetime.strptime(input, '%B %d, %Y').date()
     d2 = datetime.strptime(key["air_date"], '%B %d, %Y').date()
-    if is_after:
-        return d2 > d1
-    else:
-        return d2 < d1
+    try:
+        d1 = datetime.strptime(input, '%B %d, %Y').date()
+        if is_after:
+            return d2 > d1
+        else:
+            return d2 < d1
+    except:
+        print("use the format '<Month> <number>, <year>'")
+        exit(1)
 
 
 def spec_ep_ep_filter(results, input):
@@ -186,6 +171,7 @@ def spec_ep_ep_filter(results, input):
     :param results: list of episodes
     :param input: the episode num
     :return: the response
+    :rtype: list
     """
     final_response = []
     for key in results:
@@ -201,6 +187,7 @@ def spec_ep_sea_filter(results, input):
     :param results: list of episodes
     :param input: the season
     :return: the response
+    :rtype: str
     """
     final_response = []
     for key in results:
@@ -213,10 +200,11 @@ def spec_ep_sea_filter(results, input):
 def spec_ep_aft_bef_filter(results, input, is_after):
     """
     gets the episodes before or after a specific date in format "Month num, year"
-   :param results: list of episodes
+    :param results: list of episodes
     :param input: the date
     :param is_after: if its after or before
     :return: the response
+    :rtype: list
     """
     final_response = []
     for key in results:
@@ -245,9 +233,10 @@ def episode(
     :param season: prints all episodes of season
     :param episode_num: prints all epidosde of episode
     :return: prints all episodes acording to filters
+    :rtype: list
     """
     args = locals()
-    response = filter_request(args, 2)
+    response = filter_request(args, "EPISODE")
     if before != "":
         response = spec_ep_aft_bef_filter(response, before, False)
     if after != "":
@@ -257,7 +246,7 @@ def episode(
     if episode_num is not None:
         response = spec_ep_ep_filter(response, episode_num)
     if id is not None:
-        response = get_id(COMMANDS[2] + str(id))
+        response = get_request_all_pages(COMMANDS["EPISODE"] + str(id))
     print(json.dumps(response, indent=4))
 
 
@@ -269,10 +258,10 @@ def metrics(
     prints the metrics
     :param limit: optional limit for the metric list
     :return: prints the characters and metrics
+    :rtype: None
     """
-    results = get_request(COMMANDS[0])
+    results = get_request_all_pages(COMMANDS[0])
     character_counter = {}
-
     for result in results:
         character_counter[result["id"]] = len(result["episode"])
     if limit is None:
@@ -280,8 +269,7 @@ def metrics(
     else:
         sorted_characters = dict(sorted(character_counter.items(), key=lambda item: item[1], reverse=True)[:limit])
     for i in sorted_characters:
-        print((get_id(COMMANDS[0] + str(i))["name"]) + "  " + str(character_counter[i]))
-
+        print((get_request_all_pages(COMMANDS["CHARACTER"] + str(i))["name"]) + "  " + str(character_counter[i]))
 
 
 if __name__ == "__main__":
