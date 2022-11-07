@@ -288,7 +288,7 @@ def print_results(results):
 @app.callback()
 def main(table: bool = False):
     """
-    
+    checks if user wants it as a tbale or json
     """
     global IS_TABLE
     IS_TABLE = table
