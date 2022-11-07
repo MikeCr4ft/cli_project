@@ -3,11 +3,15 @@ import typer
 import requests
 import json
 from datetime import datetime
+import pandas as pd
+import numpy as np
+
 
 app = typer.Typer()
 
 URL = "https://rickandmortyapi.com/api/"
 COMMANDS = {"CHARACTER": "character/", "LOCATION": "location/", "EPISODE": "episode/"}
+IS_TABLE = False
 
 
 def get_request_all_pages(request: str):
@@ -52,8 +56,7 @@ def show(characters: Optional[bool] = typer.Option(False, "--characters", "-c"),
     if if_no_arg:
         for count, key in enumerate(COMMANDS):
             output += get_request_all_pages(COMMANDS[key])
-    print(json.dumps(output, indent=4))
-
+    print_results(output)
 
 def filter_request(args, type_filter: str):
     """
@@ -95,7 +98,7 @@ def character(
         gender: Optional[str] = typer.Option("", "--gender", "-g"),
         location: Optional[str] = typer.Option("", "--location", "-l"),
         origin: Optional[str] = typer.Option("", "--origin", "-o"),
-        id: Optional[int] = typer.Option("", "--id", "-i")
+        id: Optional[int] = typer.Option(None, "--id", "-i")
 ):
     """
     returns all the characters according to filters
@@ -118,8 +121,7 @@ def character(
         response = spec_ch_og_filter(response, origin, "origin")
     if id is not None:
         response = get_request_all_pages(COMMANDS["CHARACTER"] + str(id))
-    print(json.dumps(response, indent=4))
-
+    print_results(response)
 
 @app.command()
 def location(
@@ -141,7 +143,7 @@ def location(
     response = filter_request(args, "LOCATION")
     if id is not None:
         response = get_request_all_pages(COMMANDS["LOCATION"] + str(id))
-    print(json.dumps(response, indent=4))
+    print_results(response)
 
 
 def date_comp(input, key, is_after):
@@ -247,7 +249,7 @@ def episode(
         response = spec_ep_ep_filter(response, episode_num)
     if id is not None:
         response = get_request_all_pages(COMMANDS["EPISODE"] + str(id))
-    print(json.dumps(response, indent=4))
+    print_results(response)
 
 
 @app.command()
@@ -270,6 +272,26 @@ def metrics(
         sorted_characters = dict(sorted(character_counter.items(), key=lambda item: item[1], reverse=True)[:limit])
     for i in sorted_characters:
         print((get_request_all_pages(COMMANDS["CHARACTER"] + str(i))["name"]) + "  " + str(character_counter[i]))
+
+
+def print_results(results):
+    """
+    prints results either as a table or as json documents
+    """
+    if IS_TABLE:
+        df = pd.DataFrame(results)
+        print(df)
+    else:
+        print(json.dumps(results, indent=4))
+
+
+@app.callback()
+def main(table: bool = False):
+    """
+    
+    """
+    global IS_TABLE
+    IS_TABLE = table
 
 
 if __name__ == "__main__":
