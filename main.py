@@ -4,11 +4,9 @@ import requests
 import json
 from datetime import datetime
 import pandas as pd
-import numpy as np
-
+from PIL import Image
 
 app = typer.Typer()
-
 URL = "https://rickandmortyapi.com/api/"
 COMMANDS = {"CHARACTER": "character/", "LOCATION": "location/", "EPISODE": "episode/"}
 IS_TABLE = False
@@ -46,11 +44,11 @@ def show(characters: Optional[bool] = typer.Option(False, "--characters", "-c"),
     :return: prints everything according to filters
     :rtype: None
     """
-    lst = [characters, locations, episodes]
+    args = [characters, locations, episodes]
     output = []
     if_no_arg = True
     for count, key in enumerate(COMMANDS):
-        if lst[count]:
+        if args[count]:
             if_no_arg = False
             output += get_request_all_pages(COMMANDS[key])
     if if_no_arg:
@@ -58,9 +56,9 @@ def show(characters: Optional[bool] = typer.Option(False, "--characters", "-c"),
             output += get_request_all_pages(COMMANDS[key])
     print_results(output)
 
+
 def filter_request(args, type_filter: str):
     """
-
     :param args: arguments/filtes
     :param type_filter: character/episodes/location
     :return: repsonse according to filters
@@ -74,17 +72,18 @@ def filter_request(args, type_filter: str):
     return response
 
 
-def spec_ch_og_filter(results, input, filter):
+def origin_loaction_filter(results, user_input, filter_type):
     """
     filters character according to origin
+    :param filter_type: origin or location
     :param results: all the characters
-    :param input: origin
+    :param user_input: origin
     :return: response
     :rtype: None
     """
     final_response = []
     for key in results:
-        if key[filter]["name"] == input:
+        if key[filter_type]["name"] == user_input:
             final_response.append(key)
     return final_response
 
@@ -98,7 +97,8 @@ def character(
         gender: Optional[str] = typer.Option("", "--gender", "-g"),
         location: Optional[str] = typer.Option("", "--location", "-l"),
         origin: Optional[str] = typer.Option("", "--origin", "-o"),
-        id: Optional[int] = typer.Option(None, "--id", "-i")
+        id: Optional[int] = typer.Option(None, "--id", "-i"),
+        image: Optional[bool] = typer.Option(False, "--image"),
 ):
     """
     returns all the characters according to filters
@@ -114,14 +114,19 @@ def character(
     :rtype: None
     """
     args = locals()
-    response = filter_request(args, "CHARACTER")
-    if location != "":
-        response = spec_ch_og_filter(response, location, "location")
-    if origin != "":
-        response = spec_ch_og_filter(response, origin, "origin")
     if id is not None:
         response = get_request_all_pages(COMMANDS["CHARACTER"] + str(id))
+    else:
+        response = filter_request(args, "CHARACTER")
+        if location != "":
+            response = origin_loaction_filter(response, location, "location")
+        if origin != "":
+            response = origin_loaction_filter(response, origin, "origin")
+    if image and len(response) == 12:
+        print("something")
+        display_image(response["image"])
     print_results(response)
+
 
 @app.command()
 def location(
@@ -146,10 +151,10 @@ def location(
     print_results(response)
 
 
-def date_comp(input, key, is_after):
+def date_comp(user_input, key, is_after):
     """
     comparing dates
-    :param input: date of input
+    :param user_input: date of user_input
     :param key: date of episode
     :param is_after: boolean if after
     :return: true if is_After and comparison is true
@@ -157,7 +162,7 @@ def date_comp(input, key, is_after):
     """
     d2 = datetime.strptime(key["air_date"], '%B %d, %Y').date()
     try:
-        d1 = datetime.strptime(input, '%B %d, %Y').date()
+        d1 = datetime.strptime(user_input, '%B %d, %Y').date()
         if is_after:
             return d2 > d1
         else:
@@ -167,50 +172,43 @@ def date_comp(input, key, is_after):
         exit(1)
 
 
-def spec_ep_ep_filter(results, input):
+def after_episode(code, user_input):
+    return int(code[code.index("E") + 1:]) == int(user_input)
+
+
+def after_season(code, user_input):
+    return int(code[code.index("E") + 1:]) == int(user_input)
+
+
+def specific_episode_season_filter(results, user_input, func):
     """
     specific filter - for episodes according to episode num
+    :param func: funtion object for the filter
     :param results: list of episodes
-    :param input: the episode num
+    :param user_input: the episode num
     :return: the response
     :rtype: list
     """
     final_response = []
     for key in results:
         code = key["episode"]
-        if int(code[code.index("E") + 1:]) == int(input):
+        if func(code, user_input):
             final_response.append(key)
     return final_response
 
 
-def spec_ep_sea_filter(results, input):
-    """
-    specific filter - for episodes according to season
-    :param results: list of episodes
-    :param input: the season
-    :return: the response
-    :rtype: str
-    """
-    final_response = []
-    for key in results:
-        code = key["episode"]
-        if int(code[code.index("S") + 1:code.index("E")]) == int(input):
-            final_response.append(key)
-    return final_response
-
-
-def spec_ep_aft_bef_filter(results, input, is_after):
+def episode_date_filter(results, user_input, is_after):
     """
     gets the episodes before or after a specific date in format "Month num, year"
     :param results: list of episodes
-    :param input: the date
+    :param user_input: the date
     :param is_after: if its after or before
     :return: the response
     :rtype: list
     """
     final_response = []
     for key in results:
-        if date_comp(input, key, is_after):
+        if date_comp(user_input, key, is_after):
             final_response.append(key)
     return final_response
 
@@ -239,16 +237,18 @@ def episode(
     """
     args = locals()
     response = filter_request(args, "EPISODE")
-    if before != "":
-        response = spec_ep_aft_bef_filter(response, before, False)
-    if after != "":
-        response = spec_ep_aft_bef_filter(response, after, True)
-    if season is not None:
-        response = spec_ep_sea_filter(response, season)
-    if episode_num is not None:
-        response = spec_ep_ep_filter(response, episode_num)
-    if id is not None:
+    if id:
         response = get_request_all_pages(COMMANDS["EPISODE"] + str(id))
+    else:
+        if before != "":
+            response = episode_date_filter(response, before, False)
+        if after != "":
+            response = episode_date_filter(response, after, True)
+        if season:
+            response = specific_episode_season_filter(response, season, after_season)
+        if episode_num:
+            response = specific_episode_season_filter(response, episode_num, after_episode)
+
     print_results(response)
 
 
@@ -262,7 +262,7 @@ def metrics(
     :return: prints the characters and metrics
     :rtype: None
     """
-    results = get_request_all_pages(COMMANDS[0])
+    results = get_request_all_pages(COMMANDS["CHARACTER"])
     character_counter = {}
     for result in results:
         character_counter[result["id"]] = len(result["episode"])
@@ -271,7 +271,7 @@ def metrics(
     else:
         sorted_characters = dict(sorted(character_counter.items(), key=lambda item: item[1], reverse=True)[:limit])
     for i in sorted_characters:
-        print((get_request_all_pages(COMMANDS["CHARACTER"] + str(i))["name"]) + "  " + str(character_counter[i]))
+        print((get_request_all_pages(COMMANDS["CHARACTER"] + str(i)))["name"] + "  " + str(character_counter[i]))
 
 
 def print_results(results):
@@ -285,11 +285,15 @@ def print_results(results):
         print(json.dumps(results, indent=4))
 
 
+def display_image(image_url):
+    image_data = requests.get(image_url, stream=True).raw
+    print("print another something: " + str(image_data))
+    with Image.open(image_data) as im:
+        im.show()
+
+
 @app.callback()
 def main(table: bool = False):
-    """
-    checks if user wants it as a tbale or json
-    """
     global IS_TABLE
     IS_TABLE = table
 
