@@ -293,7 +293,7 @@ def display_image(image_url):
 
 
 @app.callback()
-def main(table: bool = False):
+def is_tabld(table: bool = False):
     global IS_TABLE
     IS_TABLE = table
 
